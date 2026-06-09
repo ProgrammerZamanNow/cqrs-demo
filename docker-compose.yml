@@ -110,7 +110,7 @@ services:
       retries: 20
 
   opensearch:
-    image: opensearchproject/opensearch:2.18.0
+    image: opensearchproject/opensearch:3.6.0
     container_name: cqrs-opensearch
     environment:
       discovery.type: single-node
