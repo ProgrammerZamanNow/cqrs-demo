@@ -34,6 +34,9 @@
 	let keyword = $state('');
 	let appliedKeyword = $state('');
 
+	// sumber query: 'pg' = PostgreSQL (/api/products), 'os' = OpenSearch (/api/products/_search)
+	let source = $state<'pg' | 'os'>('pg');
+
 	let selectedCategories = $state<Ref[]>([]);
 	let selectedBrands = $state<Ref[]>([]);
 	let availability = $state<string | null>(null);
@@ -69,8 +72,9 @@
 		p.set('page', String(page));
 		p.set('size', String(SIZE));
 
+		const endpoint = source === 'os' ? '/api/products/_search' : '/api/products';
 		try {
-			const res = await fetch('/api/products?' + p.toString());
+			const res = await fetch(endpoint + '?' + p.toString());
 			const json = await res.json();
 			if (my !== reqId) return;
 			products = json.data ?? [];
@@ -92,6 +96,7 @@
 	$effect(() => {
 		// dependensi yang memicu reload
 		void [
+			source,
 			appliedKeyword,
 			selectedCategories,
 			selectedBrands,
@@ -213,6 +218,18 @@
 	</div>
 
 	<form class="search" onsubmit={applySearch}>
+		<select
+			class="source mono"
+			class:os={source === 'os'}
+			bind:value={source}
+			onchange={() => (page = 0)}
+			aria-label="Sumber query"
+			title="Pilih sumber query"
+		>
+			<option value="pg">PostgreSQL</option>
+			<option value="os">OpenSearch</option>
+		</select>
+		<span class="source-div" aria-hidden="true"></span>
 		<svg class="search-ico" viewBox="0 0 24 24" aria-hidden="true">
 			<circle cx="11" cy="11" r="7" />
 			<line x1="21" y1="21" x2="16.5" y2="16.5" />
@@ -570,6 +587,34 @@
 	}
 	.search-go:hover {
 		background: var(--accent-deep);
+	}
+
+	.source {
+		flex: none;
+		border: 0;
+		background: transparent;
+		font-size: 0.74rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		color: var(--ink);
+		cursor: pointer;
+		padding: 0.25rem 0.3rem 0.25rem 0.2rem;
+		appearance: none;
+		-webkit-appearance: none;
+		text-transform: uppercase;
+	}
+	.source:focus {
+		outline: none;
+	}
+	.source.os {
+		color: var(--accent);
+	}
+	.source-div {
+		flex: none;
+		width: 1.5px;
+		align-self: stretch;
+		margin: 0.15rem 0.2rem;
+		background: var(--line-strong);
 	}
 
 	.masthead-meta {

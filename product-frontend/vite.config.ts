@@ -18,9 +18,14 @@ export default defineConfig({
 		})
 	],
 	server: {
-		// Proxy semua request /api/* ke product-backend.
-		// Target bisa diatur via env BACKEND_URL (default http://localhost:8080).
+		// Routing dev (mirror nginx di produksi):
+		//   /api/products/_search -> product-search (OpenSearch)
+		//   /api/*                -> product-backend (PostgreSQL)
 		proxy: {
+			'/api/products/_search': {
+				target: process.env.SEARCH_URL ?? 'http://localhost:8081',
+				changeOrigin: true
+			},
 			'/api': {
 				target: process.env.BACKEND_URL ?? 'http://localhost:8080',
 				changeOrigin: true
