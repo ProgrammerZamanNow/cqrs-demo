@@ -160,6 +160,9 @@
 			priceMax != null
 	);
 
+	let isSlow = $derived(took > 1000);
+	let tookText = $derived(took >= 1000 ? (took / 1000).toFixed(2) + ' s' : took + ' ms');
+
 	const fmt = (n: number) => n.toLocaleString('id-ID');
 	const idr = (n: number) =>
 		new Intl.NumberFormat('id-ID', {
@@ -227,8 +230,10 @@
 		<button type="submit" class="search-go mono">Cari</button>
 	</form>
 
-	<div class="masthead-meta mono">
-		<span class="took"><i class:live={!loading}></i>{took}ms</span>
+	<div class="masthead-meta mono" class:slow={isSlow}>
+		<span class="metric-label">respons</span>
+		<span class="metric-val"><i class="dot" class:live={!loading}></i>{tookText}</span>
+		{#if isSlow}<span class="slow-tag">⚠ lambat</span>{/if}
 	</div>
 </header>
 
@@ -569,29 +574,65 @@
 
 	.masthead-meta {
 		justify-self: end;
-		font-size: 0.72rem;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 0.15rem;
+		line-height: 1;
+	}
+	.metric-label {
+		font-size: 0.6rem;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
 		color: var(--ink-soft);
 	}
-	.took {
+	.metric-val {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.45rem;
+		font-size: 1.5rem;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--ink);
 	}
-	.took i {
-		width: 7px;
-		height: 7px;
+	.metric-val .dot {
+		width: 9px;
+		height: 9px;
 		border-radius: 50%;
 		background: var(--ink-soft);
 	}
-	.took i.live {
+	.metric-val .dot.live {
 		background: var(--good);
 		box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent);
 		animation: pulse 1.6s ease-out infinite;
 	}
 	@keyframes pulse {
 		to {
-			box-shadow: 0 0 0 6px transparent;
+			box-shadow: 0 0 0 7px transparent;
 		}
+	}
+	/* slow state: > 1 detik */
+	.masthead-meta.slow .metric-val {
+		color: var(--accent);
+	}
+	.masthead-meta.slow .metric-val .dot {
+		background: var(--accent);
+		animation: blink 0.7s steps(1) infinite;
+	}
+	@keyframes blink {
+		50% {
+			opacity: 0.25;
+		}
+	}
+	.slow-tag {
+		margin-top: 0.1rem;
+		font-size: 0.6rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--paper);
+		background: var(--accent);
+		padding: 0.12rem 0.4rem;
 	}
 
 	/* ---------- hero ---------- */
