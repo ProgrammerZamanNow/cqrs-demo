@@ -34,7 +34,8 @@ public class CdcConsumer {
 
     // group unik per boot: reference data (kecil) selalu dibaca penuh dari earliest
     // agar cache nama lengkap meski instance/offset berganti.
-    @KafkaListener(topics = "${cdc.topic.categories}", groupId = "product-search-categories-${random.uuid}")
+    @KafkaListener(topics = "${cdc.topic.categories}",
+            groupId = "#{'product-search-categories-' + T(java.util.UUID).randomUUID()}")
     public void onCategories(List<String> messages) {
         for (String msg : messages) {
             Map<String, Object> row = parse(msg);
@@ -45,7 +46,8 @@ public class CdcConsumer {
         }
     }
 
-    @KafkaListener(topics = "${cdc.topic.brands}", groupId = "product-search-brands-${random.uuid}")
+    @KafkaListener(topics = "${cdc.topic.brands}",
+            groupId = "#{'product-search-brands-' + T(java.util.UUID).randomUUID()}")
     public void onBrands(List<String> messages) {
         for (String msg : messages) {
             Map<String, Object> row = parse(msg);
