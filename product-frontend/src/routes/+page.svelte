@@ -21,7 +21,7 @@
 		availability: Avail[];
 	};
 
-	const SIZE = 60;
+	const SIZE = 36;
 	const SORTS = [
 		{ v: 'name,asc', l: 'Nama A–Z' },
 		{ v: 'name,desc', l: 'Nama Z–A' },
