@@ -1,29 +1,10 @@
-target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+# OS
+.DS_Store
 
-### IntelliJ IDEA ###
+# IDE
 .idea/
 *.iml
-*.ipr
-
-### Eclipse ###
-.classpath
-.project
-.settings/
-bin/
-
-### NetBeans ###
-nbproject/private/
-build/
-nbbuild/
-dist/
-nbdist/
-.nb-gradle/
-
-### VS Code ###
 .vscode/
 
-### Mac ###
-.DS_Store
+# Build output (per-project .gitignore juga berlaku)
+**/target/
