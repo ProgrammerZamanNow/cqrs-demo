@@ -5,6 +5,10 @@ lalu **product** dalam jumlah besar dengan memanggil REST API product-backend.
 
 Bukan bagian dari Docker — ini hanya tool sekali jalan untuk mengisi data.
 
+> Bagian dari [CQRS Demo](../README.md). Data yang dibuat ke product-backend
+> (PostgreSQL) akan **mengalir otomatis** ke OpenSearch via CDC (Debezium → Kafka →
+> product-search). Untuk demo "PostgreSQL lambat", generate banyak: `PRODUCT_COUNT=1000000`.
+
 ## Prasyarat
 - [Bun](https://bun.sh) terpasang.
 - product-backend sedang berjalan dan dapat diakses (default `http://localhost:8080`).

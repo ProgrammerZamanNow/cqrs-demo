@@ -7,6 +7,12 @@ produk per item).
 
 Spesifikasi lengkap ada di [`../REQUIREMENT.md`](../REQUIREMENT.md).
 
+> **Bagian dari [CQRS Demo](../README.md).** Service ini adalah **write model**
+> (sumber kebenaran, PostgreSQL). Perubahan datanya dialirkan via CDC (Debezium) ke
+> read model **product-search** (OpenSearch). Untuk menjalankan **full demo**
+> (semua service + CDC + frontend), ikuti [README root](../README.md). Di dalam
+> compose, PostgreSQL diekspos di host port **5433**.
+
 ---
 
 ## Daftar Isi

@@ -1,42 +1,60 @@
-# sv
+# product-frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Halaman pencarian produk (homepage ala e-commerce) — search bar di atas, panel
+**facet** di kiri, grid produk di kanan. Punya **toggle PostgreSQL ⇄ OpenSearch**
+untuk membandingkan performa kedua read source secara langsung.
 
-## Creating a project
+Bagian dari [CQRS Demo](../README.md).
 
-If you're seeing this, you've probably already done this step. Congrats!
+---
 
-```sh
-# create a new project
-npx sv create my-app
+## Tech
+- **SvelteKit** (Svelte 5, runes) + **TypeScript**, dijalankan/di-build dengan **Bun**.
+- Build **static** (`@sveltejs/adapter-static`, SPA) → disajikan **nginx** di container.
+- Tanpa state server; semua data via `fetch` ke `/api/...`.
+
+---
+
+## Toggle PostgreSQL vs OpenSearch
+Combo box di kiri search bar memilih sumber query:
+| Pilihan      | Endpoint                  | Dilayani         |
+|--------------|---------------------------|------------------|
+| `PostgreSQL` | `/api/products`           | product-backend  |
+| `OpenSearch` | `/api/products/_search`   | product-search   |
+
+Karena envelope respons identik, frontend cukup menukar URL dan menampilkan
+`metadata.processTimeMs` (badge kanan atas; berubah **⚠ lambat** bila > 1 detik).
+
+Routing `/api` ditangani:
+- **dev**: Vite proxy (`vite.config.ts`) → `BACKEND_URL` (8080) & `SEARCH_URL` (8081).
+- **produksi**: nginx (`nginx.conf`) → `product-backend` & `product-search`.
+
+---
+
+## Menjalankan
+
+### Dev (butuh backend & search jalan)
+```bash
+bun install
+bun run dev          # http://localhost:5173
+```
+Override target proxy bila perlu: `BACKEND_URL=... SEARCH_URL=... bun run dev`.
+
+### Build static
+```bash
+bun run build        # output ke ./build (SPA)
+bun run preview      # pratinjau hasil build
 ```
 
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-bun x sv@0.16.1 create --template minimal --types ts --install bun product-frontend
+### Container (nginx) — biasanya via compose root
+```bash
+# dari root cqrs-demo:
+podman compose up -d --build product-frontend   # http://localhost:3000
 ```
 
-## Developing
+---
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Pengembangan
+- `bun run check` — type-check (svelte-check).
+- Halaman utama: [`src/routes/+page.svelte`](src/routes/+page.svelte).
+- `SIZE` (item per halaman) dan daftar `SORTS` ada di atas file tersebut.
