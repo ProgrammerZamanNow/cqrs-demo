@@ -14,6 +14,7 @@ Spesifikasi lengkap ada di [`../REQUIREMENT.md`](../REQUIREMENT.md).
 - [Tech Stack](#tech-stack)
 - [Prasyarat](#prasyarat)
 - [Menjalankan Aplikasi](#menjalankan-aplikasi)
+- [Menjalankan dengan Docker Compose](#menjalankan-dengan-docker-compose)
 - [Menjalankan Test](#menjalankan-test)
 - [Ringkasan API](#ringkasan-api)
 - [Format Respons](#format-respons)
@@ -127,6 +128,30 @@ curl -X POST http://localhost:8080/api/categories \
 
 # cari produk
 curl 'http://localhost:8080/api/products?keyword=mouse&page=0&size=10&sort=price,asc'
+```
+
+---
+
+## Menjalankan dengan Docker Compose
+
+File `docker-compose.yml` berada **satu level di atas** folder ini (di root
+`cqrs-demo/`) karena ditujukan untuk mengorkestrasi beberapa project sekaligus
+(mis. backend + frontend nanti). Compose ini menjalankan PostgreSQL **dan**
+`product-backend` sekaligus (image backend dibuild dari `Dockerfile` di folder ini).
+
+```bash
+cd ..                          # masuk ke root cqrs-demo
+docker compose up --build      # atau: podman compose up --build
+```
+
+Setelah jalan:
+- API: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- PostgreSQL: `localhost:5432` (db `product`, user/pass `postgres`)
+
+Hentikan & bersihkan:
+```bash
+docker compose down            # tambahkan -v untuk menghapus volume data
 ```
 
 ---
