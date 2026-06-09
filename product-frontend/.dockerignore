@@ -1,0 +1,10 @@
+node_modules/
+build/
+.svelte-kit/
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+Dockerfile
+.dockerignore
