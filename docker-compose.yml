@@ -151,6 +151,16 @@ services:
     ports:
       - "8081:8081"
 
+  product-frontend:
+    build:
+      context: ./product-frontend
+    container_name: product-frontend
+    depends_on:
+      - product-backend
+      - product-search
+    ports:
+      - "3000:80"
+
 volumes:
   postgres-data:
   kafka-data:
