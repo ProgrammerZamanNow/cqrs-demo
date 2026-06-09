@@ -32,7 +32,9 @@ public class CdcConsumer {
         this.mapper = mapper;
     }
 
-    @KafkaListener(topics = "${cdc.topic.categories}", groupId = "product-search-categories")
+    // group unik per boot: reference data (kecil) selalu dibaca penuh dari earliest
+    // agar cache nama lengkap meski instance/offset berganti.
+    @KafkaListener(topics = "${cdc.topic.categories}", groupId = "product-search-categories-${random.uuid}")
     public void onCategories(List<String> messages) {
         for (String msg : messages) {
             Map<String, Object> row = parse(msg);
@@ -43,7 +45,7 @@ public class CdcConsumer {
         }
     }
 
-    @KafkaListener(topics = "${cdc.topic.brands}", groupId = "product-search-brands")
+    @KafkaListener(topics = "${cdc.topic.brands}", groupId = "product-search-brands-${random.uuid}")
     public void onBrands(List<String> messages) {
         for (String msg : messages) {
             Map<String, Object> row = parse(msg);
