@@ -202,7 +202,7 @@
 	<span>KATALOG PRODUK</span><span class="dot">✦</span>
 	<span>{fmt(total)} ITEM TERINDEKS</span><span class="dot">✦</span>
 	<span>PENCARIAN LANGSUNG</span><span class="dot">✦</span>
-	<span>POSTGRESQL · 100K DATA</span><span class="dot">✦</span>
+	<span>POSTGRESQL</span><span class="dot">✦</span>
 	<span>FACET DRILL-DOWN</span>
 </div>
 
