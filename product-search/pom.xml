@@ -19,7 +19,6 @@
 
     <properties>
         <java.version>25</java.version>
-        <opensearch-java.version>3.9.0</opensearch-java.version>
     </properties>
 
     <dependencies>
@@ -34,21 +33,6 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.opensearch.client</groupId>
-            <artifactId>opensearch-java</artifactId>
-            <version>${opensearch-java.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.httpcomponents.client5</groupId>
-            <artifactId>httpclient5</artifactId>
-        </dependency>
-        <!-- opensearch-java JsonpMapper memakai Jackson 2 -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
         </dependency>
 
         <dependency>
