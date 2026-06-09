@@ -1,8 +1,8 @@
-package com.pzn.product.category;
+package com.pzn.product.brand;
 
 import com.pzn.product.AbstractIntegrationTest;
-import com.pzn.product.brand.Brand;
-import com.pzn.product.category.dto.CategoryRequest;
+import com.pzn.product.brand.dto.BrandRequest;
+import com.pzn.product.category.Category;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -17,129 +17,125 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class CategoryApiTest extends AbstractIntegrationTest {
+class BrandApiTest extends AbstractIntegrationTest {
 
     private static final String MISSING_ID = "00000000-0000-0000-0000-000000000000";
 
     @Test
     void create_returns201_withEnvelopeMetadataAndHeader() throws Exception {
-        mockMvc.perform(post("/api/categories").contentType("application/json")
-                        .content(json(new CategoryRequest("Electronics", "Electronic devices"))))
+        mockMvc.perform(post("/api/brands").contentType("application/json")
+                        .content(json(new BrandRequest("Logitech", "Peripherals"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.id").exists())
-                .andExpect(jsonPath("$.data.name", is("Electronics")))
-                .andExpect(jsonPath("$.data.description", is("Electronic devices")))
+                .andExpect(jsonPath("$.data.name", is("Logitech")))
+                .andExpect(jsonPath("$.data.description", is("Peripherals")))
                 .andExpect(jsonPath("$.data.createdAt").isNumber())
-                .andExpect(jsonPath("$.data.updatedAt").isNumber())
                 .andExpect(jsonPath("$.metadata.processTimeMs", greaterThanOrEqualTo(0)))
                 .andExpect(header().exists("X-Process-Time-Ms"));
     }
 
     @Test
     void create_blankName_returns400() throws Exception {
-        mockMvc.perform(post("/api/categories").contentType("application/json")
-                        .content(json(new CategoryRequest("  ", null))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").exists())
-                .andExpect(jsonPath("$.metadata.processTimeMs").isNumber());
-    }
-
-    @Test
-    void create_nameTooLong_returns400() throws Exception {
-        mockMvc.perform(post("/api/categories").contentType("application/json")
-                        .content(json(new CategoryRequest("x".repeat(101), null))))
+        mockMvc.perform(post("/api/brands").contentType("application/json")
+                        .content(json(new BrandRequest("  ", null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
     }
 
     @Test
+    void create_nameTooLong_returns400() throws Exception {
+        mockMvc.perform(post("/api/brands").contentType("application/json")
+                        .content(json(new BrandRequest("x".repeat(101), null))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void create_duplicateName_returns409() throws Exception {
-        CategoryRequest request = new CategoryRequest("Books", null);
-        mockMvc.perform(post("/api/categories").contentType("application/json").content(json(request)))
+        BrandRequest request = new BrandRequest("Razer", null);
+        mockMvc.perform(post("/api/brands").contentType("application/json").content(json(request)))
                 .andExpect(status().isCreated());
-        mockMvc.perform(post("/api/categories").contentType("application/json").content(json(request)))
+        mockMvc.perform(post("/api/brands").contentType("application/json").content(json(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").exists());
     }
 
     @Test
     void list_returnsPaging() throws Exception {
-        newCategory("Garden");
-        newCategory("Toys");
-        mockMvc.perform(get("/api/categories"))
+        newBrand("Asus");
+        newBrand("Acer");
+        mockMvc.perform(get("/api/brands").param("sort", "name,asc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].name", is("Acer")))
                 .andExpect(jsonPath("$.paging.totalElement", is(2)))
-                .andExpect(jsonPath("$.paging.page", is(0)))
                 .andExpect(jsonPath("$.metadata.processTimeMs").isNumber());
     }
 
     @Test
     void getDetail_returns200() throws Exception {
-        Category saved = newCategory("Music");
-        mockMvc.perform(get("/api/categories/{id}", saved.getId()))
+        Brand saved = newBrand("Corsair");
+        mockMvc.perform(get("/api/brands/{id}", saved.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id", is(saved.getId().toString())))
-                .andExpect(jsonPath("$.data.name", is("Music")));
+                .andExpect(jsonPath("$.data.name", is("Corsair")));
     }
 
     @Test
     void getDetail_notFound_returns404() throws Exception {
-        mockMvc.perform(get("/api/categories/{id}", MISSING_ID))
+        mockMvc.perform(get("/api/brands/{id}", MISSING_ID))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
     }
 
     @Test
     void update_returns200_withNewData() throws Exception {
-        Category saved = newCategory("Old");
-        mockMvc.perform(put("/api/categories/{id}", saved.getId()).contentType("application/json")
-                        .content(json(new CategoryRequest("New", "updated"))))
+        Brand saved = newBrand("OldBrand");
+        mockMvc.perform(put("/api/brands/{id}", saved.getId()).contentType("application/json")
+                        .content(json(new BrandRequest("NewBrand", "updated"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.name", is("New")))
+                .andExpect(jsonPath("$.data.name", is("NewBrand")))
                 .andExpect(jsonPath("$.data.description", is("updated")));
     }
 
     @Test
     void update_duplicateName_returns409() throws Exception {
-        newCategory("Alpha");
-        Category beta = newCategory("Beta");
-        mockMvc.perform(put("/api/categories/{id}", beta.getId()).contentType("application/json")
-                        .content(json(new CategoryRequest("Alpha", null))))
+        newBrand("Alpha");
+        Brand beta = newBrand("Beta");
+        mockMvc.perform(put("/api/brands/{id}", beta.getId()).contentType("application/json")
+                        .content(json(new BrandRequest("Alpha", null))))
                 .andExpect(status().isConflict());
     }
 
     @Test
     void update_notFound_returns404() throws Exception {
-        mockMvc.perform(put("/api/categories/{id}", MISSING_ID).contentType("application/json")
-                        .content(json(new CategoryRequest("Whatever", null))))
+        mockMvc.perform(put("/api/brands/{id}", MISSING_ID).contentType("application/json")
+                        .content(json(new BrandRequest("Whatever", null))))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void delete_returns200_withNullDataAndMetadata() throws Exception {
-        Category saved = newCategory("Removable");
-        mockMvc.perform(delete("/api/categories/{id}", saved.getId()))
+        Brand saved = newBrand("Removable");
+        mockMvc.perform(delete("/api/brands/{id}", saved.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").doesNotExist())
                 .andExpect(jsonPath("$.metadata.processTimeMs").isNumber());
-        mockMvc.perform(get("/api/categories/{id}", saved.getId()))
+        mockMvc.perform(get("/api/brands/{id}", saved.getId()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void delete_notFound_returns404() throws Exception {
-        mockMvc.perform(delete("/api/categories/{id}", MISSING_ID))
+        mockMvc.perform(delete("/api/brands/{id}", MISSING_ID))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void delete_referencedByProduct_returns409() throws Exception {
-        Category category = newCategory("Used");
-        Brand brand = newBrand("BrandX");
-        newProduct("SKU-C", "Item", new BigDecimal("1000"), 1, category, brand);
+        Category category = newCategory("Cat");
+        Brand brand = newBrand("UsedBrand");
+        newProduct("SKU-B", "Item", new BigDecimal("1000"), 1, category, brand);
 
-        mockMvc.perform(delete("/api/categories/{id}", category.getId()))
+        mockMvc.perform(delete("/api/brands/{id}", brand.getId()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").exists());
     }
