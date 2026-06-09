@@ -1,0 +1,61 @@
+:root {
+	--paper: #f1ebdc;
+	--paper-2: #e8dfc9;
+	--card: #f7f2e7;
+	--ink: #191510;
+	--ink-2: #463d31;
+	--ink-soft: #867a68;
+	--line: #d6cbb2;
+	--line-strong: #b8a988;
+	--accent: #d63f1e;
+	--accent-deep: #ab2f15;
+	--good: #4d6f4d;
+
+	--font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+	--font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+	--font-mono: 'Spline Sans Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	background-color: var(--paper);
+	color: var(--ink);
+	font-family: var(--font-body);
+	font-size: 16px;
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+/* film grain over everything */
+body::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	pointer-events: none;
+	opacity: 0.045;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection {
+	background: var(--accent);
+	color: var(--paper);
+}
+
+a {
+	color: inherit;
+}
+
+button {
+	font-family: inherit;
+}
