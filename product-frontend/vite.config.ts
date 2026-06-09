@@ -16,5 +16,15 @@ export default defineConfig({
 			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 			adapter: adapter()
 		})
-	]
+	],
+	server: {
+		// Proxy semua request /api/* ke product-backend.
+		// Target bisa diatur via env BACKEND_URL (default http://localhost:8080).
+		proxy: {
+			'/api': {
+				target: process.env.BACKEND_URL ?? 'http://localhost:8080',
+				changeOrigin: true
+			}
+		}
+	}
 });
