@@ -1,4 +1,4 @@
-# SLIDE — CQRS untuk Product Search
+# SLIDE — CQRS (Command Query Responsibility Segregation)
 
 > **Catatan untuk pembuat slide (Claude Design):** File ini adalah materi sumber.
 > Setiap bagian dipisah `---` = satu slide. `##` = judul slide. Bullet = poin di
@@ -8,14 +8,18 @@
 
 ---
 
-## CQRS untuk Product Search
+## CQRS
 
-### Dari PostgreSQL yang lambat → OpenSearch yang cepat
+### Command Query Responsibility Segregation
 
-Sebuah studi kasus nyata: pencarian katalog produk e-commerce
+Memisahkan model **tulis (Command)** dari model **baca (Query)** agar tiap sisi
+bisa dioptimalkan independen.
 
-> Narasi: Kita akan mulai dari sebuah masalah sederhana yang dialami banyak tim,
-> lalu pelan-pelan sampai ke solusi CQRS — dan mendemokannya langsung.
+> Studi kasus: pencarian katalog produk e-commerce (PostgreSQL → OpenSearch)
+
+> Narasi: Yang kita bahas adalah **pola CQRS** — product search hanya contoh kasus
+> yang membuat masalahnya terasa nyata. Kita mulai dari masalah sederhana yang
+> dialami banyak tim, lalu pelan-pelan sampai ke CQRS dan mendemokannya langsung.
 
 ---
 
