@@ -38,7 +38,8 @@ public class SearchController {
             @RequestParam(required = false) String availability,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "name,asc") String sort) {
+            @RequestParam(defaultValue = "name,asc") String sort,
+            @RequestParam(defaultValue = "true") boolean facet) {
 
         if (size > 100) {
             throw new IllegalArgumentException("size must be less than or equal to 100");
@@ -48,7 +49,7 @@ public class SearchController {
         String avail = availability != null && AVAILABILITY.contains(availability) ? availability : null;
 
         SearchParams params = new SearchParams(
-                keyword, categoryId, brandId, minPrice, maxPrice, avail, safePage, safeSize, sort);
+                keyword, categoryId, brandId, minPrice, maxPrice, avail, safePage, safeSize, sort, facet);
         SearchResult result = searchService.search(params);
 
         return WebResponse.search(

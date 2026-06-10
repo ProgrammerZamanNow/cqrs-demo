@@ -45,7 +45,7 @@ public class SearchService {
     public record SearchParams(
             String keyword, List<String> categoryIds, List<String> brandIds,
             Double minPrice, Double maxPrice, String availability,
-            int page, int size, String sort) {
+            int page, int size, String sort, boolean facet) {
     }
 
     public record SearchResult(List<ProductView> products, long total, Facets facets) {
@@ -73,12 +73,15 @@ public class SearchService {
 
         root.set("sort", sortNode(p.sort()));
 
-        ObjectNode aggs = mapper.createObjectNode();
-        aggs.set("facet_categories", filterAgg(filterClauses(p, Dim.CATEGORY), termsAgg("categoryId")));
-        aggs.set("facet_brands", filterAgg(filterClauses(p, Dim.BRAND), termsAgg("brandId")));
-        aggs.set("facet_price", filterAgg(filterClauses(p, Dim.PRICE), priceAgg()));
-        aggs.set("facet_availability", filterAgg(filterClauses(p, Dim.AVAILABILITY), availabilityAgg()));
-        root.set("aggs", aggs);
+        // facet=false → lewati aggregations (isolasi biaya search murni dari facet).
+        if (p.facet()) {
+            ObjectNode aggs = mapper.createObjectNode();
+            aggs.set("facet_categories", filterAgg(filterClauses(p, Dim.CATEGORY), termsAgg("categoryId")));
+            aggs.set("facet_brands", filterAgg(filterClauses(p, Dim.BRAND), termsAgg("brandId")));
+            aggs.set("facet_price", filterAgg(filterClauses(p, Dim.PRICE), priceAgg()));
+            aggs.set("facet_availability", filterAgg(filterClauses(p, Dim.AVAILABILITY), availabilityAgg()));
+            root.set("aggs", aggs);
+        }
 
         JsonNode resp = client.search(IndexInitializer.INDEX, mapper.writeValueAsString(root));
         return parse(resp, p);
@@ -267,7 +270,10 @@ public class SearchService {
             ));
         }
 
-        Facets facets = total == 0 ? Facets.empty() : parseFacets(resp, p);
+        Facets facets = null;
+        if (p.facet()) {
+            facets = total == 0 ? Facets.empty() : parseFacets(resp, p);
+        }
         return new SearchResult(products, total, facets);
     }
 

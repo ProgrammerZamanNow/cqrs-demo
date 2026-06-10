@@ -21,6 +21,23 @@
 		{ v: 'stock,desc', l: 'Stok terbanyak' }
 	];
 
+	// Engine baca (read model). facet=false → admin tak menampilkan facet, jadi
+	// kita ukur biaya SEARCH murni untuk membandingkan ketiga engine.
+	//   pg      → PostgreSQL naif      (LIKE '%..%' seq scan)
+	//   pg-trgm → PostgreSQL + trigram (GIN pg_trgm)
+	//   os      → OpenSearch           (n-gram inverted index)
+	type EngineKey = 'pg' | 'pg-trgm' | 'os';
+	const ENGINES: { v: EngineKey; l: string; read: string; q: Record<string, string> }[] = [
+		{ v: 'pg', l: 'PostgreSQL', read: '/api/products', q: { facet: 'false' } },
+		{ v: 'pg-trgm', l: 'PostgreSQL + trigram', read: '/api/products', q: { engine: 'trigram', facet: 'false' } },
+		{ v: 'os', l: 'OpenSearch', read: '/api/products/_search', q: { facet: 'false' } }
+	];
+	// Tulis SELALU ke PostgreSQL (write model / source of truth).
+	const WRITE = '/api/products';
+
+	let engine = $state<EngineKey>('pg');
+	let engineCfg = $derived(ENGINES.find((e) => e.v === engine)!);
+
 	let products = $state<Product[]>([]);
 	let total = $state(0);
 	let totalPages = $state(0);
@@ -32,6 +49,7 @@
 	let searchNonce = $state(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let notice = $state<string | null>(null);
 
 	let categories = $state<Ref[]>([]);
 	let brands = $state<Ref[]>([]);
@@ -53,17 +71,23 @@
 		brandId: ''
 	});
 
+	let reqId = 0;
+
 	async function load() {
+		const my = ++reqId;
 		loading = true;
 		error = null;
 		try {
+			const cfg = engineCfg;
 			const params = new URLSearchParams();
 			if (appliedKeyword.trim()) params.set('keyword', appliedKeyword.trim());
 			params.set('page', String(page));
 			params.set('size', String(SIZE));
 			params.set('sort', sortBy);
-			const res = await fetch('/api/products?' + params.toString());
+			for (const [k, v] of Object.entries(cfg.q)) params.set(k, v);
+			const res = await fetch(cfg.read + '?' + params.toString());
 			const json = await res.json();
+			if (my !== reqId) return;
 			took = json.metadata?.processTimeMs ?? 0;
 			if (res.ok) {
 				products = json.data ?? [];
@@ -73,9 +97,11 @@
 				error = json.error ?? `error ${res.status}`;
 			}
 		} catch {
+			if (my !== reqId) return;
 			error = 'gagal terhubung ke server';
+		} finally {
+			if (my === reqId) loading = false;
 		}
-		loading = false;
 	}
 
 	async function loadRefs() {
@@ -88,18 +114,32 @@
 	}
 
 	$effect(() => {
-		void [page, appliedKeyword, sortBy, searchNonce];
+		void [engine, page, appliedKeyword, sortBy, searchNonce];
 		load();
 	});
 	$effect(() => {
 		loadRefs();
 	});
 
+	function pickEngine(v: EngineKey) {
+		if (engine === v) {
+			searchNonce++; // klik ulang engine yang sama → re-query (bandingkan angka)
+		} else {
+			engine = v;
+			page = 0;
+		}
+	}
+
 	function applySearch(e: Event) {
 		e.preventDefault();
 		appliedKeyword = keyword.trim();
 		page = 0;
 		searchNonce++; // selalu picu API call walau keyword sama
+	}
+
+	function flashNotice(msg: string) {
+		notice = msg;
+		setTimeout(() => (notice = null), 6000);
 	}
 
 	function openCreate() {
@@ -118,16 +158,15 @@
 		showForm = true;
 	}
 
-	// Edit: ambil data TERBARU dari API get detail dulu sebelum buka dialog.
+	// Edit: selalu ambil data TERBARU dari write model (PostgreSQL) lewat GET detail.
 	async function openEdit(p: Product) {
 		editingId = p.id;
 		formError = null;
 		detailLoading = true;
 		showForm = true;
 		try {
-			const res = await fetch(`/api/products/${p.id}`);
+			const res = await fetch(`${WRITE}/${p.id}`);
 			const json = await res.json();
-			took = json.metadata?.processTimeMs ?? took;
 			if (res.ok) {
 				const d = json.data;
 				f = {
@@ -153,6 +192,15 @@
 		showForm = false;
 	}
 
+	// Notice pasca-tulis: di OpenSearch ada jeda CDC; di PostgreSQL langsung tampil.
+	function afterWrite(verb: string) {
+		if (engine === 'os') {
+			flashNotice(
+				`${verb} ke PostgreSQL. Akan tampil di OpenSearch ~1 detik setelah CDC sync — klik ↻ Refresh.`
+			);
+		}
+	}
+
 	async function save(e: Event) {
 		e.preventDefault();
 		saving = true;
@@ -167,7 +215,7 @@
 			categoryId: f.categoryId,
 			brandId: f.brandId
 		});
-		const url = editingId ? `/api/products/${editingId}` : '/api/products';
+		const url = editingId ? `${WRITE}/${editingId}` : WRITE;
 		try {
 			const res = await fetch(url, {
 				method: editingId ? 'PUT' : 'POST',
@@ -175,9 +223,9 @@
 				body
 			});
 			const json = await res.json().catch(() => ({}));
-			took = json.metadata?.processTimeMs ?? took;
 			if (res.ok) {
 				showForm = false;
+				afterWrite(editingId ? 'Tersimpan' : 'Dibuat');
 				await load();
 			} else {
 				formError = json.error ?? `error ${res.status}`;
@@ -192,16 +240,18 @@
 		if (!confirm(`Hapus produk "${p.name}" (${p.sku})?\nTindakan ini tidak bisa dibatalkan.`)) return;
 		error = null;
 		try {
-			const res = await fetch(`/api/products/${p.id}`, { method: 'DELETE' });
+			const res = await fetch(`${WRITE}/${p.id}`, { method: 'DELETE' });
 			const json = await res.json().catch(() => ({}));
-			took = json.metadata?.processTimeMs ?? took;
-			if (res.ok) await load();
-			else error = json.error ?? `error ${res.status}`;
+			if (res.ok) {
+				afterWrite('Dihapus');
+				await load();
+			} else error = json.error ?? `error ${res.status}`;
 		} catch {
 			error = 'gagal terhubung ke server';
 		}
 	}
 
+	let isSlow = $derived(engine !== 'os' && took > 1000);
 	const idr = (n: number) =>
 		new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 	const fmt = (n: number) => n.toLocaleString('id-ID');
@@ -212,10 +262,43 @@
 <div class="head">
 	<h1>Products</h1>
 	<span class="count mono">{fmt(total)} produk</span>
-	<span class="took mono"><i></i>API {took} ms</span>
+	<span class="took mono" class:slow={isSlow} class:os={engine === 'os'}>
+		<i></i>{engineCfg.l} · {took} ms{isSlow ? ' ⚠' : ''}
+	</span>
+	<button class="ghost mono" onclick={load} title="Muat ulang">↻ Refresh</button>
 	<button class="add mono" onclick={openCreate}>+ Tambah Produk</button>
 </div>
 
+<div class="engines mono" role="group" aria-label="Pilih engine baca">
+	<span class="engines-label">baca dari</span>
+	{#each ENGINES as e}
+		<button
+			class="eng"
+			class:active={engine === e.v}
+			class:os={e.v === 'os'}
+			class:trgm={e.v === 'pg-trgm'}
+			onclick={() => pickEngine(e.v)}
+		>
+			{e.l}
+		</button>
+	{/each}
+</div>
+
+<p class="banner mono">
+	{#if engine === 'os'}
+		📖 List dibaca dari <b>OpenSearch</b> (read model). Tambah/edit/hapus ditulis ke
+		<b>PostgreSQL</b> (write model) → tersinkron ke OpenSearch via CDC (~1 dtk).
+	{:else if engine === 'pg-trgm'}
+		📖 List dibaca dari <b>PostgreSQL + trigram</b> (GIN <code>pg_trgm</code>) — keyword
+		search pakai index. Tulis langsung ke PostgreSQL.
+	{:else}
+		📖 List dibaca dari <b>PostgreSQL naif</b> (<code>LIKE '%..%'</code> sequential scan).
+		Tulis langsung ke PostgreSQL.
+	{/if}
+	<span class="hint">facet dimatikan (<code>facet=false</code>) → ukur biaya search murni.</span>
+</p>
+
+{#if notice}<p class="notice mono">{notice}</p>{/if}
 {#if error}<p class="err mono">{error}</p>{/if}
 
 <div class="card list">
@@ -334,7 +417,8 @@
 		gap: 1rem;
 		padding-bottom: 1rem;
 		border-bottom: 1.5px solid var(--ink);
-		margin-bottom: 1.5rem;
+		margin-bottom: 1rem;
+		flex-wrap: wrap;
 	}
 	.head h1 {
 		font-family: var(--font-display);
@@ -362,7 +446,13 @@
 		width: 7px;
 		height: 7px;
 		border-radius: 50%;
+		background: var(--accent);
+	}
+	.took.os i {
 		background: var(--good);
+	}
+	.took.slow {
+		color: var(--accent);
 	}
 	.add {
 		border: 0;
@@ -376,6 +466,85 @@
 	}
 	.add:hover {
 		background: var(--accent-deep);
+	}
+
+	/* segmented engine selector */
+	.engines {
+		display: flex;
+		align-items: stretch;
+		gap: 0;
+		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
+	}
+	.engines-label {
+		display: inline-flex;
+		align-items: center;
+		font-size: 0.6rem;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		margin-right: 0.7rem;
+	}
+	.eng {
+		border: 1.5px solid var(--ink);
+		border-right-width: 0;
+		background: var(--card);
+		color: var(--ink-2);
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		padding: 0.45rem 0.9rem;
+		cursor: pointer;
+	}
+	.eng:first-of-type {
+		border-left-width: 1.5px;
+	}
+	.eng:last-of-type {
+		border-right-width: 1.5px;
+	}
+	.eng:hover {
+		color: var(--ink);
+		background: color-mix(in srgb, var(--ink) 6%, var(--card));
+	}
+	.eng.active {
+		background: var(--ink);
+		color: var(--paper);
+		font-weight: 600;
+	}
+	.eng.active.os {
+		background: var(--good);
+	}
+	.eng.active.trgm {
+		background: #2e7d32;
+		color: var(--paper);
+	}
+	.banner {
+		font-size: 0.72rem;
+		line-height: 1.5;
+		color: var(--ink-2);
+		background: color-mix(in srgb, var(--ink) 5%, transparent);
+		border-left: 3px solid var(--ink);
+		padding: 0.55rem 0.8rem;
+		margin: 0 0 1rem;
+	}
+	.banner code {
+		font-family: var(--font-mono);
+		font-size: 0.92em;
+		background: color-mix(in srgb, var(--ink) 8%, transparent);
+		padding: 0 0.2rem;
+	}
+	.banner .hint {
+		display: block;
+		margin-top: 0.2rem;
+		color: var(--ink-soft);
+	}
+	.notice {
+		font-size: 0.74rem;
+		color: var(--ink);
+		background: color-mix(in srgb, var(--good) 22%, transparent);
+		padding: 0.5rem 0.7rem;
+		margin: 0 0 1rem;
 	}
 	.card {
 		background: var(--card);
@@ -632,7 +801,7 @@
 		border: 1.5px solid var(--line-strong);
 		background: transparent;
 		color: var(--ink-2);
-		padding: 0.55rem 1rem;
+		padding: 0.5rem 0.9rem;
 		cursor: pointer;
 		font-size: 0.72rem;
 		letter-spacing: 0.1em;

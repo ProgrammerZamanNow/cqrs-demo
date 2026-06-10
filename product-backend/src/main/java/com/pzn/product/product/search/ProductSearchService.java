@@ -16,6 +16,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import org.hibernate.Session;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -56,18 +58,41 @@ public class ProductSearchService {
         this.entityManager = entityManager;
     }
 
+    /**
+     * @param trigram bila {@code true}, biarkan planner memakai GIN trigram index
+     *                (pencarian cepat ala n-gram). Bila {@code false} (naif/default),
+     *                bitmap scan dimatikan untuk transaksi ini sehingga keyword
+     *                {@code LIKE '%..%'} kembali sequential scan — memperagakan
+     *                kondisi "tanpa trigram".
+     * @param facet   bila {@code false}, lewati perhitungan facet (mengisolasi biaya
+     *                search murni dari biaya agregasi facet). Respons tanpa {@code facets}.
+     */
     @Transactional(readOnly = true)
-    public ProductSearchResult search(ProductSearchFilter filter, Pageable pageable) {
+    public ProductSearchResult search(ProductSearchFilter filter, Pageable pageable,
+                                      boolean trigram, boolean facet) {
+        if (!trigram) {
+            // GIN trigram hanya bisa dipakai lewat bitmap scan → mematikannya
+            // memaksa keyword search kembali ke sequential scan (perilaku naif).
+            entityManager.unwrap(Session.class).doWork(connection -> {
+                try (Statement st = connection.createStatement()) {
+                    st.execute("SET LOCAL enable_bitmapscan = off");
+                }
+            });
+        }
+
         Specification<Product> spec = ProductPredicates.specification(filter);
         Page<Product> page = productRepository.findAll(spec, pageable);
 
-        ProductFacets facets = page.getTotalElements() == 0
-                ? ProductFacets.empty()
-                : new ProductFacets(
-                        categoryFacet(filter),
-                        brandFacet(filter),
-                        priceRangeFacet(filter),
-                        availabilityFacet(filter));
+        ProductFacets facets = null;
+        if (facet) {
+            facets = page.getTotalElements() == 0
+                    ? ProductFacets.empty()
+                    : new ProductFacets(
+                            categoryFacet(filter),
+                            brandFacet(filter),
+                            priceRangeFacet(filter),
+                            availabilityFacet(filter));
+        }
 
         return new ProductSearchResult(page.map(ProductResponse::from), facets);
     }

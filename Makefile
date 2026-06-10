@@ -1,7 +1,7 @@
 COMPOSE ?= podman compose
 CONNECTOR := product-postgres-source
 
-.PHONY: up down build clean register unregister status topics psql os-count logs
+.PHONY: up down build clean register unregister status topics psql os-count logs bench
 
 up:
 	$(COMPOSE) up -d
@@ -35,6 +35,11 @@ psql:
 
 os-count:
 	@curl -fsS http://localhost:9200/products/_count | jq .
+
+# benchmark 3 engine (PG naif / PG+trigram / OpenSearch) × search/facet
+# OpenSearch di-warmup khusus dulu (cache dingin)
+bench:
+	python3 bench.py
 
 logs:
 	$(COMPOSE) logs -f --tail=100

@@ -57,11 +57,14 @@ public class ProductController {
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) Availability availability,
+            @RequestParam(required = false, defaultValue = "naive") String engine,
+            @RequestParam(required = false, defaultValue = "true") boolean facet,
             @PageableDefault(size = 10) Pageable pageable) {
         ProductSearchFilter filter = new ProductSearchFilter(
                 keyword, categoryId, brandId, minPrice, maxPrice, availability);
         Pageable sanitized = PageableSupport.sanitize(pageable, SORTABLE, DEFAULT_SORT);
-        ProductSearchResult result = productSearchService.search(filter, sanitized);
+        boolean trigram = "trigram".equalsIgnoreCase(engine);
+        ProductSearchResult result = productSearchService.search(filter, sanitized, trigram, facet);
         return WebResponse.search(
                 result.page().getContent(),
                 PagingResponse.from(result.page()),

@@ -34,8 +34,11 @@
 	let keyword = $state('');
 	let appliedKeyword = $state('');
 
-	// sumber query: 'pg' = PostgreSQL (/api/products), 'os' = OpenSearch (/api/products/_search)
-	let source = $state<'pg' | 'os'>('pg');
+	// sumber query:
+	//   'pg'      = PostgreSQL naif      (/api/products?engine=naive — LIKE seq scan)
+	//   'pg-trgm' = PostgreSQL + trigram (/api/products?engine=trigram — GIN pg_trgm)
+	//   'os'      = OpenSearch           (/api/products/_search — n-gram inverted index)
+	let source = $state<'pg' | 'pg-trgm' | 'os'>('pg');
 
 	let selectedCategories = $state<Ref[]>([]);
 	let selectedBrands = $state<Ref[]>([]);
@@ -73,7 +76,12 @@
 		p.set('page', String(page));
 		p.set('size', String(SIZE));
 
-		const endpoint = source === 'os' ? '/api/products/_search' : '/api/products';
+		let endpoint = '/api/products';
+		if (source === 'os') {
+			endpoint = '/api/products/_search';
+		} else if (source === 'pg-trgm') {
+			p.set('engine', 'trigram');
+		}
 		try {
 			const res = await fetch(endpoint + '?' + p.toString());
 			const json = await res.json();
@@ -224,12 +232,14 @@
 		<select
 			class="source mono"
 			class:os={source === 'os'}
+			class:trgm={source === 'pg-trgm'}
 			bind:value={source}
 			onchange={() => (page = 0)}
 			aria-label="Sumber query"
 			title="Pilih sumber query"
 		>
 			<option value="pg">PostgreSQL</option>
+			<option value="pg-trgm">PostgreSQL + trigram</option>
 			<option value="os">OpenSearch</option>
 		</select>
 		<span class="source-div" aria-hidden="true"></span>
@@ -612,6 +622,9 @@
 	}
 	.source.os {
 		color: var(--accent);
+	}
+	.source.trgm {
+		color: #2e7d32;
 	}
 	.source-div {
 		flex: none;

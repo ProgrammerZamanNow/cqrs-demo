@@ -88,8 +88,95 @@ flowchart LR
 ```
 
 > Narasi: Database OLTP (PostgreSQL) dioptimalkan untuk transaksi tulis yang
-> ternormalisasi — bukan untuk full-text search + agregasi berat. Kita memakai
-> alat yang salah untuk pekerjaan ini.
+> ternormalisasi — bukan untuk full-text search + agregasi berat. Tapi sebelum
+> buru-buru ganti arsitektur, tahan dulu: coba optimalkan PostgreSQL-nya.
+
+---
+
+## Tahan Dulu: Optimalkan Database, BARU CQRS
+
+Sebelum menambah arsitektur baru, **optimalkan dulu yang sudah ada.**
+
+- CQRS itu **mahal**: +Kafka, +Debezium, +OpenSearch, +eventual consistency,
+  dua datastore untuk dijaga & dimonitor.
+- Urutan yang benar:
+  1. **Optimalkan database dulu** — index, query, skema.
+  2. **Ukur ulang.**
+  3. **Hanya jika sudah mentok** → pertimbangkan CQRS.
+- Lompat ke CQRS karena **butuh**, bukan karena tren.
+
+> Narasi: Ini disiplin engineering. Banyak tim langsung bilang "butuh Kafka + CQRS"
+> padahal satu index saja sudah cukup. Mari buktikan dulu: seberapa jauh PostgreSQL
+> bisa dioptimalkan?
+
+---
+
+## Optimasi: Index Trigram (`pg_trgm`)
+
+Masalah keyword: `LIKE '%kata%'` (leading wildcard) → B-tree tak terpakai → seq scan.
+Solusinya ada **di dalam PostgreSQL sendiri**:
+
+```sql
+CREATE EXTENSION pg_trgm;
+CREATE INDEX idx_products_name_trgm
+    ON products USING GIN (LOWER(name) gin_trgm_ops);
+CREATE INDEX idx_products_description_trgm
+    ON products USING GIN (LOWER(description) gin_trgm_ops);
+```
+
+- **Trigram** = n-gram 3 huruf — "mouse" → `mou, ous, use`, disimpan di **GIN index**.
+- **Konsep yang persis sama** dengan analyzer n-gram OpenSearch.
+- Query `LIKE '%..%'` yang **sudah ada otomatis** memakai index — **nol perubahan kode aplikasi**.
+
+> Narasi: Perhatikan, ini bukan menambal aplikasi — cukup satu migration SQL.
+> PostgreSQL punya "search engine mini" di dalamnya. Ini optimasi paling murah.
+
+---
+
+## Hasil Optimasi: Search Murni Melesat
+
+Keyword search **tanpa facet** (search murni), 1 juta produk — `processTimeMs` (avg):
+
+| Keyword (match)      | PG naif (seq scan) | PG + trigram | Speedup |
+|----------------------|-------------------:|-------------:|--------:|
+| `titanium` (874)     | 1033 ms | **13 ms** | **~79×** |
+| `handcrafted` (39rb) |  869 ms |   235 ms  |   ~4×   |
+| `rubber` (80rb)      |  822 ms |   291 ms  |   ~3×   |
+| `ergonomic` (135rb)  | 1118 ms |   544 ms  |   ~2×   |
+
+- Keyword **selektif**: dari **~1 dtk → 13 ms** — hampir secepat search engine.
+- Bukti seq scan: PG naif **konstan ~0,8–1,1 dtk** apa pun keyword-nya (biaya tak
+  peduli jumlah match) — ciri khas sequential scan; trigram menskala dengan jumlah match.
+
+> Narasi: Pelajaran besar pertama — jangan remehkan optimasi DB. Satu index: 850 ms
+> jadi 11 ms. Kalau kebutuhanmu hanya keyword search selektif, **selesai di sini —
+> tak perlu CQRS.**
+
+---
+
+## Tapi Optimasi Punya Batas
+
+Trigram hebat untuk keyword, **tapi tidak menyelesaikan semuanya**:
+
+- **Facet tetap berat** — agregasi `GROUP BY` tetap memproses semua baris yang cocok:
+  - PG + trigram **+ facet**: `titanium` jadi **357 ms**, `ergonomic` **1759 ms**
+    (search murninya tadi cuma 13 ms & 544 ms — facet-lah biang lambatnya).
+  - OpenSearch + facet: **12–29 ms** — facet **nyaris gratis** (satu pass agregasi).
+- **Keyword umum** (cocok >10% data) → bitmap tetap menyentuh hampir seluruh tabel.
+- **Beban menumpuk di DB OLTP yang sama**: GIN index besar (~157 MB) + overhead tulis;
+  read berat tarik-menarik resource dengan transaksi write.
+
+```mermaid
+flowchart LR
+    O["Optimasi DB<br/>(pg_trgm)"] --> G1["Keyword search:<br/>SELESAI ✓"]
+    O --> G2["Facet berat: TETAP ✗"]
+    O --> G3["Skala & beban OLTP: TETAP ✗"]
+    G2 & G3 --> C["→ di sinilah CQRS<br/>baru masuk akal"]
+```
+
+> Narasi: Inilah titik mentok. Search sudah cepat, tapi facet + skala + beban OLTP
+> tetap masalah. DI SINILAH optimasi habis dan CQRS benar-benar dibutuhkan —
+> bukan sebelumnya.
 
 ---
 
@@ -295,23 +382,72 @@ flowchart LR
 
 ---
 
-## Demo: PostgreSQL vs OpenSearch
+## Demo: Tiga Engine Berdampingan
 
-- Frontend punya **toggle**: pilih sumber query (PostgreSQL / OpenSearch).
-- Endpoint & **format respons identik** → tinggal tukar URL:
-  - PostgreSQL → `GET /api/products`
-  - OpenSearch → `GET /api/products/_search`
-- Badge **waktu proses** ditampilkan; > 1 detik → **⚠ lambat**.
+- Frontend punya **toggle 3 engine** — menelusuri seluruh perjalanan optimasi:
+  - **PostgreSQL** (naif) → `GET /api/products`
+  - **PostgreSQL + trigram** → `GET /api/products?engine=trigram`
+  - **OpenSearch** → `GET /api/products/_search`
+- **Format respons identik** → tinggal tukar URL. Badge **waktu proses**; > 1 dtk → **⚠ lambat**.
+- Param **`facet=true/false`** memisahkan biaya *search murni* dari *facet*.
+- Halaman **`/admin/products`**: pemilih engine satu klik untuk **banding langsung**.
 
 ```mermaid
 flowchart LR
     FE[Frontend toggle]
-    FE -->|PostgreSQL| PG["/api/products<br/>~3 dtk @ 1jt ⚠"]
-    FE -->|OpenSearch| OS["/api/products/_search<br/>puluhan ms"]
+    FE -->|PostgreSQL naif| PG["/api/products<br/>~850 ms ⚠"]
+    FE -->|+ trigram| TG["?engine=trigram<br/>~11 ms (selektif)"]
+    FE -->|OpenSearch| OS["/api/products/_search<br/>~15 ms + facet murah"]
 ```
 
-> Narasi: Inilah momen "wow"-nya. Keyword yang sama, data yang sama, hasil yang
-> sama — tapi satu 3 detik, satu puluhan milidetik. Penonton lihat bedanya langsung.
+> Narasi: Inilah momen "wow"-nya. Penonton lihat tiga angka berdampingan untuk
+> keyword & data yang sama: naif (lambat) → trigram (optimasi DB, jauh lebih cepat)
+> → OpenSearch (tercepat + facet nyaris gratis). Perjalanan optimasi jadi kelihatan.
+
+---
+
+## Benchmark: Search Murni (3 Engine)
+
+`processTimeMs` server-side @ **1 juta produk**, rata-rata 5 run (`facet=false`):
+
+| Keyword (match)      |  PG naif | PG+trigram | OpenSearch |
+|----------------------|---------:|-----------:|-----------:|
+| `titanium` (874)     | 1033 ms  |    13 ms   |    13 ms   |
+| `handcrafted` (39rb) |  869 ms  |   235 ms   |    19 ms   |
+| `rubber` (80rb)      |  822 ms  |   291 ms   |    24 ms   |
+| `ergonomic` (135rb)  | 1118 ms  |   544 ms   |    27 ms   |
+
+> ⚠ **Metodologi**: OpenSearch di-**warmup khusus** (6× semua keyword × mode)
+> sebelum diukur — cache dingin OS bisa bikin angka pertama menyesatkan. PG & trigram
+> pakai warmup umum 3×. Semua lewat `make`/`bench.py`.
+
+> Narasi: Trigram menjinakkan keyword search (titanium 1033→13 ms), tapi makin umun
+> keyword-nya makin kecil untungnya — OpenSearch tetap stabil belasan ms.
+
+---
+
+## Benchmark: + Facet & Ringkasan
+
+Tambahkan facet (`facet=true`) — inilah pembeda sesungguhnya:
+
+| Keyword (match)      |  PG naif | PG+trigram | OpenSearch |
+|----------------------|---------:|-----------:|-----------:|
+| `titanium` (874)     | 3352 ms  |   357 ms   |    12 ms   |
+| `ergonomic` (135rb)  | 3121 ms  |  1759 ms   |    29 ms   |
+
+**Rata-rata lintas keyword:**
+
+| Engine        | Search murni | + Facet | Speedup search vs naif |
+|---------------|-------------:|--------:|-----------------------:|
+| PG naif       |   960 ms     | 3230 ms | 1×                     |
+| PG + trigram  |   271 ms     | 1102 ms | **~3,5×**              |
+| OpenSearch    |    21 ms     |   21 ms | **~46×**               |
+
+- **Facet hampir tak menambah biaya di OpenSearch** (21 → 21 ms) — satu pass agregasi.
+- Di PG, facet **berlipat**: naif +2,3 dtk, trigram +0,8 dtk → titik mentok optimasi.
+
+> Narasi: Lihat kolom OpenSearch: search & +facet sama-sama ~21 ms. Itulah kenapa
+> setelah optimasi DB mentok di facet, CQRS + OpenSearch jadi jawaban.
 
 ---
 
@@ -363,14 +499,17 @@ flowchart LR
 ## Ringkasan / Takeaways
 
 1. **Masalah**: `LIKE` + facet di PostgreSQL **tidak skala** (≈3 dtk @ 1 juta).
-2. **Akar**: satu model dipaksa melayani write **dan** search.
-3. **CQRS**: pisahkan write (PostgreSQL) dari read (OpenSearch).
-4. **Jembatannya**: **CDC (Debezium → Kafka)** — bersih, tanpa ubah penulis.
-5. **Hasil**: hasil **sama**, kecepatan **puluhan ms** vs detik.
+2. **Optimalkan DB dulu**: `pg_trgm` menurunkan keyword search **850 ms → 11 ms**
+   tanpa ubah kode — **jangan lompat ke CQRS sebelum ini dicoba.**
+3. **Batas optimasi**: trigram tak menyelesaikan **facet** & beban **OLTP** — di
+   sinilah CQRS baru beralasan.
+4. **CQRS**: pisahkan write (PostgreSQL) dari read (OpenSearch); jembatan **CDC
+   (Debezium → Kafka)** — bersih, tanpa ubah penulis.
+5. **Hasil**: hasil **sama**, kecepatan **puluhan ms** (search + facet) vs detik.
 6. **Harga**: **eventual consistency** + kompleksitas — pilih sesuai kebutuhan.
 
-> Narasi tutup: "Database yang tepat untuk pekerjaan yang tepat. CQRS membuat itu
-> mungkin tanpa mengorbankan sumber kebenaran."
+> Narasi tutup: "Optimalkan dulu yang ada; pakai CQRS saat memang mentok. Database
+> yang tepat untuk pekerjaan yang tepat — tanpa mengorbankan sumber kebenaran."
 
 ---
 
@@ -379,6 +518,7 @@ flowchart LR
 - Repo demo: `ProgrammerZamanNow/cqrs-demo`
 - Coba sendiri: `podman compose up -d --build` → `make register` → buka `:3000`
 
-> Narasi: Siapkan jawaban untuk pertanyaan klasik: "kenapa tidak pg_trgm /
-> full-text PostgreSQL saja?" (jawab: menambal keyword, tapi facet tetap berat;
-> dan tetap membebani DB OLTP yang sama).
+> Narasi: Pertanyaan klasik "kenapa tidak pg_trgm saja?" sudah kita **demokan
+> langsung**: trigram memang mempercepat keyword (850 ms → 11 ms), tapi facet tetap
+> berat (+ratusan ms s/d >1 dtk) dan tetap membebani DB OLTP yang sama. Optimasi DB
+> dulu — saat facet & skala mentok, barulah CQRS.
