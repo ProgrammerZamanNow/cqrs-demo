@@ -1,4 +1,4 @@
-# SLIDE — CQRS (Command Query Responsibility Segregation)
+# SLIDE — Senior Engineer Wajib Tahu CQRS: Bikin Search 100× Lebih Cepat
 
 > **Catatan untuk pembuat slide (Claude Design):** File ini adalah materi sumber.
 > Setiap bagian dipisah `---` = satu slide. `##` = judul slide. Bullet = poin di
@@ -8,12 +8,12 @@
 
 ---
 
-## CQRS
+## Senior Engineer Wajib Tahu CQRS
 
-### Command Query Responsibility Segregation
+### Bikin Search 100× Lebih Cepat
 
-Memisahkan model **tulis (Command)** dari model **baca (Query)** agar tiap sisi
-bisa dioptimalkan independen.
+**Command Query Responsibility Segregation** — memisahkan model **tulis (Command)**
+dari model **baca (Query)** agar tiap sisi bisa dioptimalkan independen.
 
 > Studi kasus: pencarian katalog produk e-commerce (PostgreSQL → OpenSearch)
 
