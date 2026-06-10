@@ -451,6 +451,7 @@
 
 <footer class="foot mono">
 	<span>Arsip № — demo facet search</span>
+	<a class="foot-admin" href="/admin">Kelola data (Admin) →</a>
 	<span>SvelteKit · Spring Boot · PostgreSQL</span>
 </footer>
 
@@ -1105,6 +1106,7 @@
 	.foot {
 		display: flex;
 		justify-content: space-between;
+		align-items: center;
 		flex-wrap: wrap;
 		gap: 1rem;
 		padding: 1.4rem clamp(1rem, 4vw, 3rem);
@@ -1113,6 +1115,15 @@
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
+	}
+	.foot-admin {
+		color: var(--ink);
+		text-decoration: none;
+		border-bottom: 1.5px solid var(--accent);
+		padding-bottom: 2px;
+	}
+	.foot-admin:hover {
+		color: var(--accent);
 	}
 
 	/* ---------- responsive ---------- */
