@@ -13,20 +13,32 @@
 	};
 
 	const SIZE = 20;
+	const SORTS = [
+		{ v: 'name,asc', l: 'Nama A–Z' },
+		{ v: 'name,desc', l: 'Nama Z–A' },
+		{ v: 'price,asc', l: 'Harga ↑' },
+		{ v: 'price,desc', l: 'Harga ↓' },
+		{ v: 'stock,desc', l: 'Stok terbanyak' }
+	];
 
 	let products = $state<Product[]>([]);
 	let total = $state(0);
 	let totalPages = $state(0);
 	let page = $state(0);
+	let took = $state(0);
+	let keyword = $state('');
+	let appliedKeyword = $state('');
+	let sortBy = $state('name,asc');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
 	let categories = $state<Ref[]>([]);
 	let brands = $state<Ref[]>([]);
 
-	// form
+	// dialog
 	let showForm = $state(false);
 	let saving = $state(false);
+	let detailLoading = $state(false);
 	let formError = $state<string | null>(null);
 	let editingId = $state<string | null>(null);
 	let f = $state({
@@ -44,8 +56,14 @@
 		loading = true;
 		error = null;
 		try {
-			const res = await fetch(`/api/products?page=${page}&size=${SIZE}&sort=name,asc`);
+			const params = new URLSearchParams();
+			if (appliedKeyword.trim()) params.set('keyword', appliedKeyword.trim());
+			params.set('page', String(page));
+			params.set('size', String(SIZE));
+			params.set('sort', sortBy);
+			const res = await fetch('/api/products?' + params.toString());
 			const json = await res.json();
+			took = json.metadata?.processTimeMs ?? 0;
 			if (res.ok) {
 				products = json.data ?? [];
 				total = json.paging?.totalElement ?? 0;
@@ -69,12 +87,18 @@
 	}
 
 	$effect(() => {
-		void page;
+		void [page, appliedKeyword, sortBy];
 		load();
 	});
 	$effect(() => {
 		loadRefs();
 	});
+
+	function applySearch(e: Event) {
+		e.preventDefault();
+		appliedKeyword = keyword.trim();
+		page = 0;
+	}
 
 	function openCreate() {
 		editingId = null;
@@ -92,20 +116,35 @@
 		showForm = true;
 	}
 
-	function openEdit(p: Product) {
+	// Edit: ambil data TERBARU dari API get detail dulu sebelum buka dialog.
+	async function openEdit(p: Product) {
 		editingId = p.id;
 		formError = null;
-		f = {
-			sku: p.sku,
-			name: p.name,
-			description: p.description ?? '',
-			price: p.price,
-			stock: p.stock,
-			imageUrl: p.imageUrl ?? '',
-			categoryId: p.category.id,
-			brandId: p.brand.id
-		};
+		detailLoading = true;
 		showForm = true;
+		try {
+			const res = await fetch(`/api/products/${p.id}`);
+			const json = await res.json();
+			took = json.metadata?.processTimeMs ?? took;
+			if (res.ok) {
+				const d = json.data;
+				f = {
+					sku: d.sku,
+					name: d.name,
+					description: d.description ?? '',
+					price: d.price,
+					stock: d.stock,
+					imageUrl: d.imageUrl ?? '',
+					categoryId: d.category.id,
+					brandId: d.brand.id
+				};
+			} else {
+				formError = json.error ?? `error ${res.status}`;
+			}
+		} catch {
+			formError = 'gagal memuat detail';
+		}
+		detailLoading = false;
 	}
 
 	function closeForm() {
@@ -134,6 +173,7 @@
 				body
 			});
 			const json = await res.json().catch(() => ({}));
+			took = json.metadata?.processTimeMs ?? took;
 			if (res.ok) {
 				showForm = false;
 				await load();
@@ -147,11 +187,12 @@
 	}
 
 	async function remove(p: Product) {
-		if (!confirm(`Hapus produk "${p.name}" (${p.sku})?`)) return;
+		if (!confirm(`Hapus produk "${p.name}" (${p.sku})?\nTindakan ini tidak bisa dibatalkan.`)) return;
 		error = null;
 		try {
 			const res = await fetch(`/api/products/${p.id}`, { method: 'DELETE' });
 			const json = await res.json().catch(() => ({}));
+			took = json.metadata?.processTimeMs ?? took;
 			if (res.ok) await load();
 			else error = json.error ?? `error ${res.status}`;
 		} catch {
@@ -164,15 +205,32 @@
 	const fmt = (n: number) => n.toLocaleString('id-ID');
 </script>
 
+<svelte:window onkeydown={(e) => e.key === 'Escape' && showForm && closeForm()} />
+
 <div class="head">
 	<h1>Products</h1>
 	<span class="count mono">{fmt(total)} produk</span>
+	<span class="took mono"><i></i>API {took} ms</span>
 	<button class="add mono" onclick={openCreate}>+ Tambah Produk</button>
 </div>
 
 {#if error}<p class="err mono">{error}</p>{/if}
 
 <div class="card list">
+	<div class="toolbar">
+		<form class="search" onsubmit={applySearch}>
+			<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+			<input bind:value={keyword} placeholder="Cari produk (nama / deskripsi)…" aria-label="Cari produk" />
+			<button type="submit" class="go mono">Cari</button>
+		</form>
+		<label class="sortbox mono">
+			urut
+			<select bind:value={sortBy} onchange={() => (page = 0)}>
+				{#each SORTS as s}<option value={s.v}>{s.l}</option>{/each}
+			</select>
+		</label>
+	</div>
+
 	{#if loading}
 		<p class="muted mono">memuat…</p>
 	{:else if products.length === 0}
@@ -210,55 +268,55 @@
 	</nav>
 {/if}
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && showForm && closeForm()} />
-
 {#if showForm}
 	<div class="overlay">
 		<form class="modal" onsubmit={save}>
 			<h2 class="mono">{editingId ? 'Edit Produk' : 'Tambah Produk'}</h2>
 			{#if formError}<p class="err mono">{formError}</p>{/if}
-
-			<div class="form-grid">
-				<label>
-					<span class="mono">SKU *</span>
-					<input bind:value={f.sku} maxlength="50" required placeholder="SKU-0000001" />
-				</label>
-				<label>
-					<span class="mono">Nama *</span>
-					<input bind:value={f.name} maxlength="150" required />
-				</label>
-				<label class="span2">
-					<span class="mono">Deskripsi</span>
-					<textarea bind:value={f.description} rows="2"></textarea>
-				</label>
-				<label>
-					<span class="mono">Harga (IDR) *</span>
-					<input type="number" bind:value={f.price} min="0" step="1" required />
-				</label>
-				<label>
-					<span class="mono">Stok</span>
-					<input type="number" bind:value={f.stock} min="0" step="1" />
-				</label>
-				<label>
-					<span class="mono">Kategori *</span>
-					<select bind:value={f.categoryId} required>
-						{#each categories as c}<option value={c.id}>{c.name}</option>{/each}
-					</select>
-				</label>
-				<label>
-					<span class="mono">Brand *</span>
-					<select bind:value={f.brandId} required>
-						{#each brands as b}<option value={b.id}>{b.name}</option>{/each}
-					</select>
-				</label>
-				<label class="span2">
-					<span class="mono">Image URL</span>
-					<input bind:value={f.imageUrl} maxlength="500" placeholder="kosong = pakai dummy" />
-				</label>
-			</div>
-
+			{#if detailLoading}
+				<p class="muted mono">memuat detail…</p>
+			{:else}
+				<div class="form-grid">
+					<label>
+						<span class="mono">SKU *</span>
+						<input bind:value={f.sku} maxlength="50" required placeholder="SKU-0000001" />
+					</label>
+					<label>
+						<span class="mono">Nama *</span>
+						<input bind:value={f.name} maxlength="150" required />
+					</label>
+					<label class="span2">
+						<span class="mono">Deskripsi</span>
+						<textarea bind:value={f.description} rows="2"></textarea>
+					</label>
+					<label>
+						<span class="mono">Harga (IDR) *</span>
+						<input type="number" bind:value={f.price} min="0" step="1" required />
+					</label>
+					<label>
+						<span class="mono">Stok</span>
+						<input type="number" bind:value={f.stock} min="0" step="1" />
+					</label>
+					<label>
+						<span class="mono">Kategori *</span>
+						<select bind:value={f.categoryId} required>
+							{#each categories as c}<option value={c.id}>{c.name}</option>{/each}
+						</select>
+					</label>
+					<label>
+						<span class="mono">Brand *</span>
+						<select bind:value={f.brandId} required>
+							{#each brands as b}<option value={b.id}>{b.name}</option>{/each}
+						</select>
+					</label>
+					<label class="span2">
+						<span class="mono">Image URL</span>
+						<input bind:value={f.imageUrl} maxlength="500" placeholder="kosong = pakai dummy" />
+					</label>
+				</div>
+			{/if}
 			<div class="actions">
-				<button type="submit" class="primary mono" disabled={saving}>
+				<button type="submit" class="primary mono" disabled={saving || detailLoading}>
 					{saving ? 'menyimpan…' : editingId ? 'Simpan' : 'Tambah'}
 				</button>
 				<button type="button" class="ghost mono" onclick={closeForm}>Batal</button>
@@ -288,8 +346,23 @@
 		text-transform: uppercase;
 		color: var(--ink-soft);
 	}
-	.add {
+	.took {
 		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.82rem;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--ink);
+	}
+	.took i {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--good);
+	}
+	.add {
 		border: 0;
 		background: var(--accent);
 		color: var(--paper);
@@ -306,6 +379,75 @@
 		background: var(--card);
 		border: 1.5px solid var(--ink);
 		overflow-x: auto;
+	}
+	.toolbar {
+		display: flex;
+		align-items: center;
+		gap: 0.8rem;
+		padding: 0.7rem 0.9rem;
+		border-bottom: 1.5px solid var(--ink);
+	}
+	.search {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex: 1;
+		border: 1.5px solid var(--line-strong);
+		background: var(--paper);
+		padding: 0.25rem 0.3rem 0.25rem 0.55rem;
+	}
+	.search svg {
+		width: 15px;
+		height: 15px;
+		flex: none;
+		fill: none;
+		stroke: var(--ink-soft);
+		stroke-width: 2;
+		stroke-linecap: round;
+	}
+	.search input {
+		border: 0;
+		background: transparent;
+		padding: 0.15rem 0;
+		font-size: 0.86rem;
+		flex: 1;
+		min-width: 0;
+		font-family: var(--font-body);
+		color: var(--ink);
+	}
+	.search input:focus {
+		outline: none;
+	}
+	.search .go {
+		border: 0;
+		background: var(--ink);
+		color: var(--paper);
+		font-size: 0.66rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		padding: 0.4rem 0.7rem;
+		cursor: pointer;
+	}
+	.search .go:hover {
+		background: var(--accent);
+	}
+	.sortbox {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-size: 0.66rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.sortbox select {
+		font-family: var(--font-mono);
+		font-size: 0.76rem;
+		padding: 0.3rem 0.45rem;
+		border: 1.5px solid var(--ink);
+		background: var(--card);
+		color: var(--ink);
+		cursor: pointer;
 	}
 	.muted {
 		color: var(--ink-soft);
