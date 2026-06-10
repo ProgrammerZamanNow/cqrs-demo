@@ -5,6 +5,7 @@
 
 	const tabs = [
 		{ href: '/admin/products', label: 'Products' },
+		{ href: '/admin/products/search', label: 'Products · OpenSearch' },
 		{ href: '/admin/categories', label: 'Categories' },
 		{ href: '/admin/brands', label: 'Brands' }
 	];
@@ -18,7 +19,7 @@
 		</a>
 		<nav class="tabs mono">
 			{#each tabs as t}
-				<a href={t.href} class:active={page.url.pathname.startsWith(t.href)}>{t.label}</a>
+				<a href={t.href} class:active={page.url.pathname === t.href}>{t.label}</a>
 			{/each}
 		</nav>
 		<a class="store mono" href="/">← storefront</a>
