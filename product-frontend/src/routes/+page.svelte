@@ -44,6 +44,7 @@
 	let priceMax = $state<number | null>(null);
 	let sort = $state('name,asc');
 	let page = $state(0);
+	let searchNonce = $state(0);
 
 	let products = $state<Product[]>([]);
 	let facets = $state<Facets | null>(null);
@@ -104,7 +105,8 @@
 			priceMin,
 			priceMax,
 			sort,
-			page
+			page,
+			searchNonce
 		];
 		load();
 	});
@@ -113,6 +115,7 @@
 		e.preventDefault();
 		appliedKeyword = keyword.trim();
 		page = 0;
+		searchNonce++; // selalu picu API call walau keyword sama (uji query yang sama)
 	}
 	function clearKeyword() {
 		keyword = '';

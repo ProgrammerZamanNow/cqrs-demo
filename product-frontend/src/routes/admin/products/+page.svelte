@@ -29,6 +29,7 @@
 	let keyword = $state('');
 	let appliedKeyword = $state('');
 	let sortBy = $state('name,asc');
+	let searchNonce = $state(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
@@ -87,7 +88,7 @@
 	}
 
 	$effect(() => {
-		void [page, appliedKeyword, sortBy];
+		void [page, appliedKeyword, sortBy, searchNonce];
 		load();
 	});
 	$effect(() => {
@@ -98,6 +99,7 @@
 		e.preventDefault();
 		appliedKeyword = keyword.trim();
 		page = 0;
+		searchNonce++; // selalu picu API call walau keyword sama
 	}
 
 	function openCreate() {
